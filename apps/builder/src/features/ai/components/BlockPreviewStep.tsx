@@ -9,6 +9,7 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import type {
+  CachedAnalysisResult,
   ClarificationChoice,
   DetectedElement,
   PreviewChoice,
@@ -21,6 +22,9 @@ interface BlockPreviewStepProps {
   onPreviewChoiceChange: (elementIndex: number, isIncluded: boolean) => void;
   onGenerate: () => void;
   isLoading: boolean;
+  cachedResult?: CachedAnalysisResult;
+  fromCache?: boolean;
+  onReanalyze?: () => void;
 }
 
 export const BlockPreviewStep = ({
@@ -30,6 +34,9 @@ export const BlockPreviewStep = ({
   onPreviewChoiceChange,
   onGenerate,
   isLoading,
+  cachedResult,
+  fromCache,
+  onReanalyze,
 }: BlockPreviewStepProps) => {
   const borderColorSelected = useColorModeValue("blue.200", "blue.300");
   const borderColorUnselected = useColorModeValue("gray.200", "gray.600");
@@ -75,6 +82,14 @@ export const BlockPreviewStep = ({
 
   return (
     <VStack spacing={6} align="stretch">
+      {fromCache && cachedResult && onReanalyze && (
+        <CachedAnalysisAlert
+          cachedResult={cachedResult}
+          onReanalyze={onReanalyze}
+          isLoading={isLoading}
+        />
+      )}
+
       <VStack spacing={4}>
         <Text fontSize="lg" fontWeight="medium">
           Preview & Select Blocks

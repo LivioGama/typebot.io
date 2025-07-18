@@ -9,7 +9,11 @@ import {
   VStack,
   useColorModeValue,
 } from "@chakra-ui/react";
-import type { ClarificationChoice, DetectedElement } from "../types";
+import type {
+  CachedAnalysisResult,
+  ClarificationChoice,
+  DetectedElement,
+} from "../types";
 
 interface BlockClarificationStepProps {
   elements: DetectedElement[];
@@ -21,6 +25,9 @@ interface BlockClarificationStepProps {
   ) => void;
   onGenerate: () => void;
   isLoading: boolean;
+  cachedResult?: CachedAnalysisResult;
+  fromCache?: boolean;
+  onReanalyze?: () => void;
 }
 
 const BLOCK_TYPE_OPTIONS = [
@@ -66,6 +73,9 @@ export const BlockClarificationStep = ({
   onClarificationChange,
   onGenerate,
   isLoading,
+  cachedResult,
+  fromCache,
+  onReanalyze,
 }: BlockClarificationStepProps) => {
   const elementsNeedingClarification = elements.filter(
     (el) => el.clarificationNeeded || el.type === "choice",
@@ -138,6 +148,14 @@ export const BlockClarificationStep = ({
 
   return (
     <VStack spacing={6} align="stretch">
+      {fromCache && cachedResult && onReanalyze && (
+        <CachedAnalysisAlert
+          cachedResult={cachedResult}
+          onReanalyze={onReanalyze}
+          isLoading={isLoading}
+        />
+      )}
+
       <VStack spacing={4}>
         <Text fontSize="lg" fontWeight="medium">
           Clarify Ambiguous Elements

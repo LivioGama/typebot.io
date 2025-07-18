@@ -45,6 +45,7 @@ export const CreateWithAIModal = ({
     handlePreviewChoiceChange,
     handleContinueToPreview,
     handleGenerate,
+    handleReanalyze,
     reset,
     elementsNeedingClarification,
   } = useAIGeneration();
@@ -164,6 +165,9 @@ export const CreateWithAIModal = ({
                 onClarificationChange={handleClarificationChoiceChange}
                 onGenerate={handleContinueToPreview}
                 isLoading={isLoading}
+                cachedResult={currentState.cachedResult}
+                fromCache={currentState.fromCache}
+                onReanalyze={handleReanalyze}
               />
             )}
 
@@ -175,6 +179,9 @@ export const CreateWithAIModal = ({
               onPreviewChoiceChange={handlePreviewChoiceChange}
               onGenerate={handleGenerateAndImport}
               isLoading={isLoading}
+              cachedResult={currentState.cachedResult}
+              fromCache={currentState.fromCache}
+              onReanalyze={handleReanalyze}
             />
           )}
 

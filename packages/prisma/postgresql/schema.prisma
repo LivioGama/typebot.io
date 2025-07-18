@@ -108,6 +108,7 @@ model Workspace {
   lastActivityAt                DateTime?
   inactiveFirstEmailSentAt      DateTime?
   inactiveSecondEmailSentAt     DateTime?
+  imageAnalysisCache            ImageAnalysisCache[]
 }
 
 model MemberInWorkspace {
@@ -398,6 +399,23 @@ model BannedIp {
   responsibleTypebotId String
   user                 User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   userId               String
+}
+
+model ImageAnalysisCache {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  fileHash        String   @unique // SHA-256 hash of the image file
+  fileName        String   // Original filename for reference
+  fileSize        Int      // File size in bytes
+  mimeType        String   // MIME type of the image
+  workspaceId     String   // Workspace that performed the analysis
+  analysisResult  Json     // Cached DetectedElement[] array
+  apiKey          String   // Hashed API key identifier (for different AI models)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([fileHash])
+  @@index([workspaceId])
 }
 
 enum WorkspaceRole {

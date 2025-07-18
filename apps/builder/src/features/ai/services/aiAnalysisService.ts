@@ -1,6 +1,16 @@
+import { trpc } from "@/lib/queryClient";
 import OpenAI from "openai";
-import type { DetectedElement } from "../types";
-import { mockAnalysisResponse } from "./mockAnalysisResponse";
+import type {
+  AnalysisResultWithCache,
+  CachedAnalysisResult,
+  DetectedElement,
+} from "../types";
+import {
+  computeFileHash,
+  createApiKeyHash,
+  getFileMetadata,
+  isValidImageFile,
+} from "./hashUtils";
 
 const analyzeImageWithOpenAI = async (
   imageData: string,
@@ -170,6 +180,104 @@ const convertFileToBase64 = async (file: File): Promise<string> => {
   });
 };
 
+/**
+ * Checks if there's a cached analysis result for the given file hash and API key.
+ * Returns the cached result if found, otherwise returns null.
+ */
+const checkCachedAnalysis = async (
+  fileHash: string,
+  apiKeyHash: string,
+  workspaceId: string,
+): Promise<CachedAnalysisResult | null> => {
+  try {
+    const cachedResult = await trpc.ai.getCachedAnalysis.query({
+      fileHash,
+      apiKeyHash,
+      workspaceId,
+    });
+    return cachedResult;
+  } catch (error) {
+    console.warn("Failed to check cached analysis:", error);
+    return null;
+  }
+};
+
+/**
+ * Saves the analysis result to cache for future reuse.
+ */
+const saveCachedAnalysis = async (
+  fileHash: string,
+  apiKeyHash: string,
+  workspaceId: string,
+  metadata: ReturnType<typeof getFileMetadata>,
+  analysisResult: DetectedElement[],
+): Promise<void> => {
+  try {
+    await trpc.ai.saveCachedAnalysis.mutate({
+      fileHash,
+      apiKeyHash,
+      workspaceId,
+      fileName: metadata.fileName,
+      fileSize: metadata.fileSize,
+      mimeType: metadata.mimeType,
+      analysisResult,
+    });
+  } catch (error) {
+    console.warn("Failed to save cached analysis:", error);
+    // Don't throw error as this is not critical to the main flow
+  }
+};
+
+export const analyzeImageWithCache = async (
+  imageFile: File,
+  apiKey: string,
+  workspaceId: string,
+  forceAnalysis = false,
+): Promise<AnalysisResultWithCache> => {
+  if (!isValidImageFile(imageFile)) {
+    throw new Error("Invalid image file format");
+  }
+
+  const fileHash = await computeFileHash(imageFile);
+  const apiKeyHash = await createApiKeyHash(apiKey);
+  const metadata = getFileMetadata(imageFile);
+
+  // Check cache first unless forced to reanalyze
+  if (!forceAnalysis) {
+    const cachedResult = await checkCachedAnalysis(
+      fileHash,
+      apiKeyHash,
+      workspaceId,
+    );
+    if (cachedResult) {
+      return {
+        elements: cachedResult.analysisResult,
+        cached: cachedResult,
+        fromCache: true,
+      };
+    }
+  }
+
+  // Perform fresh analysis
+  const base64Image = await convertFileToBase64(imageFile);
+  const elements = await analyzeImageWithOpenAI(base64Image, apiKey);
+
+  // Cache the results for future use
+  await saveCachedAnalysis(
+    fileHash,
+    apiKeyHash,
+    workspaceId,
+    metadata,
+    elements,
+  );
+
+  return {
+    elements,
+    fromCache: false,
+  };
+};
+
+// Maintain backward compatibility
 export const analyzeImage = async (
   imageFile: File,
   apiKey: string,

@@ -1,4 +1,4 @@
-import { analyzeImage, generateTypebot } from "@/features/ai";
+import { analyzeImageWithCache, generateTypebot } from "@/features/ai";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { trpc } from "@/lib/queryClient";
 import { useToast } from "@chakra-ui/react";
@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import type {
   AIGenerationStep,
+  CachedAnalysisResult,
   ClarificationChoice,
   DetectedElement,
   PreviewChoice,
@@ -27,6 +28,10 @@ export const useAIGeneration = () => {
   >([]);
   const [previewChoices, setPreviewChoices] = useState<PreviewChoice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [cachedResult, setCachedResult] = useState<
+    CachedAnalysisResult | undefined
+  >();
+  const [fromCache, setFromCache] = useState(false);
 
   const { data: credentials } = useQuery(
     trpc.credentials.listCredentials.queryOptions(
@@ -87,8 +92,8 @@ export const useAIGeneration = () => {
   );
 
   const handleImageUpload = useCallback(
-    async (file: File) => {
-      if (!hasOpenAICredentials || !apiKey) {
+    async (file: File, forceAnalysis = false) => {
+      if (!hasOpenAICredentials || !apiKey || !workspace?.id) {
         toast({
           title: "OpenAI credentials required",
           description:
@@ -102,20 +107,34 @@ export const useAIGeneration = () => {
       setIsLoading(true);
 
       try {
-        const elements = await analyzeImage(file, apiKey);
-        setDetectedElements(elements);
+        const result = await analyzeImageWithCache(
+          file,
+          apiKey,
+          workspace.id,
+          forceAnalysis,
+        );
 
-        const elementsNeedingClarification = elements.filter(
+        setDetectedElements(result.elements);
+        setCachedResult(result.cached);
+        setFromCache(result.fromCache);
+
+        if (result.fromCache && result.cached) {
+          toast({
+            title: "Using cached analysis",
+            description: `Found previous analysis from ${result.cached.createdAt.toLocaleDateString()}`,
+            status: "info",
+          });
+        }
+
+        const elementsNeedingClarification = result.elements.filter(
           (el) => el.clarificationNeeded || el.type === "choice",
         );
 
         if (elementsNeedingClarification.length > 0) {
           setCurrentStep("clarification");
         } else {
-          // No clarification needed, proceed to preview step
           setCurrentStep("preview");
-          // Initialize preview choices with all elements included by default
-          const initialPreviewChoices = elements.map((_, index) => ({
+          const initialPreviewChoices = result.elements.map((_, index) => ({
             elementIndex: index,
             isIncluded: true,
           }));
@@ -132,7 +151,7 @@ export const useAIGeneration = () => {
         setIsLoading(false);
       }
     },
-    [hasOpenAICredentials, apiKey, toast, generateTypebotInternal],
+    [hasOpenAICredentials, apiKey, workspace?.id, toast],
   );
 
   const handleClarificationChoiceChange = useCallback(
@@ -169,14 +188,14 @@ export const useAIGeneration = () => {
 
   const handleContinueToPreview = useCallback(() => {
     setCurrentStep("preview");
-
-    // Initialize preview choices with all elements included by default
-    const initialPreviewChoices = detectedElements.map((_, index) => ({
-      elementIndex: index,
-      isIncluded: true,
-    }));
-    setPreviewChoices(initialPreviewChoices);
-  }, [detectedElements]);
+    if (previewChoices.length === 0) {
+      const initialPreviewChoices = detectedElements.map((_, index) => ({
+        elementIndex: index,
+        isIncluded: true,
+      }));
+      setPreviewChoices(initialPreviewChoices);
+    }
+  }, [detectedElements, previewChoices.length]);
 
   const handleGenerate = useCallback(async () => {
     if (!uploadedImage || !hasOpenAICredentials || !apiKey) return null;
@@ -185,12 +204,10 @@ export const useAIGeneration = () => {
     setIsLoading(true);
 
     try {
-      // Filter elements based on preview choices
       const includedElementIndices = previewChoices
         .filter((choice) => choice.isIncluded)
         .map((choice) => choice.elementIndex);
 
-      // If no preview choices are set, include all elements (fallback)
       const elementsToInclude =
         includedElementIndices.length > 0
           ? detectedElements.filter((_, index) =>
@@ -200,7 +217,6 @@ export const useAIGeneration = () => {
 
       const elementsWithClarifications = elementsToInclude.map(
         (element, originalIndex) => {
-          // Find the original index in the full elements array
           const elementIndex = detectedElements.findIndex(
             (el) => el === element,
           );
@@ -222,7 +238,6 @@ export const useAIGeneration = () => {
       const typebot = await generateTypebotInternal(elementsWithClarifications);
       return typebot;
     } catch (error) {
-      // Error is already handled in generateTypebotInternal
       return null;
     } finally {
       setIsLoading(false);
@@ -237,12 +252,20 @@ export const useAIGeneration = () => {
     generateTypebotInternal,
   ]);
 
+  const handleReanalyze = useCallback(async () => {
+    if (uploadedImage) {
+      await handleImageUpload(uploadedImage, true);
+    }
+  }, [uploadedImage, handleImageUpload]);
+
   const reset = useCallback(() => {
     setCurrentStep("upload");
     setUploadedImage(undefined);
     setDetectedElements([]);
     setClarificationChoices([]);
     setPreviewChoices([]);
+    setCachedResult(undefined);
+    setFromCache(false);
     setIsLoading(false);
   }, []);
 
@@ -253,6 +276,8 @@ export const useAIGeneration = () => {
     clarificationChoices,
     previewChoices,
     hasOpenAICredentials,
+    cachedResult,
+    fromCache,
   };
 
   return {
@@ -263,6 +288,7 @@ export const useAIGeneration = () => {
     handlePreviewChoiceChange,
     handleContinueToPreview,
     handleGenerate,
+    handleReanalyze,
     reset,
     elementsNeedingClarification: detectedElements.filter(
       (el) => el.clarificationNeeded || el.type === "choice",

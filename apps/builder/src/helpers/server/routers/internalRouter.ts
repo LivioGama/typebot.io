@@ -1,3 +1,4 @@
+import { aiRouter } from "@/features/ai/api/router";
 import { authRouter } from "@/features/auth/api/router";
 import { googleSheetsRouter } from "@/features/blocks/integrations/googleSheets/api/router";
 import { openAIRouter } from "@/features/blocks/integrations/openai/api/router";
@@ -15,6 +16,7 @@ export const internalRouter = router({
   generateUploadUrl,
   whatsAppInternal: internalWhatsAppRouter,
   openAI: openAIRouter,
+  ai: aiRouter,
   forge: forgeRouter,
   sheets: googleSheetsRouter,
   telemetry: telemetryRouter,
