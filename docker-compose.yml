@@ -45,15 +45,23 @@ services:
 
   typebot-builder:
     <<: *typebot-common
-    image: baptistearno/typebot-builder:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SCOPE: builder
     ports:
-      - "8080:3000"
+      - "8080:8282"
 
   typebot-viewer:
     <<: *typebot-common
-    image: baptistearno/typebot-viewer:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SCOPE: viewer
     ports:
-      - "8081:3000"
+      - "8081:8283"
 
 networks:
   typebot-network:
