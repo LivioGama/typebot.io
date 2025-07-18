@@ -44,6 +44,8 @@ services:
       - typebot-network
 
   typebot-builder:
+    environment:
+      - HOSTNAME=0.0.0.0
     <<: *typebot-common
     build:
       context: .
@@ -51,9 +53,11 @@ services:
       args:
         SCOPE: builder
     ports:
-      - "8080:8282"
+      - "8080:3000"
 
   typebot-viewer:
+    environment:
+      - HOSTNAME=0.0.0.0
     <<: *typebot-common
     build:
       context: .
@@ -61,7 +65,7 @@ services:
       args:
         SCOPE: viewer
     ports:
-      - "8081:8283"
+      - "8081:3000"
 
 networks:
   typebot-network:

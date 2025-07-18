@@ -1,0 +1,29 @@
+{
+  "services": {
+    "typebot-builder": {
+      "networks": {
+        "easypanel": {
+          "aliases": [
+            "cannajournal_typebot_typebot-builder"
+          ]
+        },
+        "default": null
+      }
+    },
+    "typebot-viewer": {
+      "networks": {
+        "easypanel": {
+          "aliases": [
+            "cannajournal_typebot_typebot-viewer"
+          ]
+        },
+        "default": null
+      }
+    }
+  },
+  "networks": {
+    "easypanel": {
+      "external": true
+    }
+  }
+}
