@@ -3,10 +3,12 @@ import { authenticatedProcedure } from "@/helpers/server/trpc";
 import { TRPCError } from "@trpc/server";
 import { encrypt } from "@typebot.io/credentials/encrypt";
 import type { Credentials } from "@typebot.io/credentials/schemas";
-import { googleSheetsCredentialsSchema } from "@typebot.io/credentials/schemas";
-import { smtpCredentialsSchema } from "@typebot.io/credentials/schemas";
-import { stripeCredentialsSchema } from "@typebot.io/credentials/schemas";
-import { whatsAppCredentialsSchema } from "@typebot.io/credentials/schemas";
+import {
+  googleSheetsCredentialsSchema,
+  smtpCredentialsSchema,
+  stripeCredentialsSchema,
+  whatsAppCredentialsSchema,
+} from "@typebot.io/credentials/schemas";
 import { forgedCredentialsSchemas } from "@typebot.io/forge-repository/credentials";
 import { isDefined } from "@typebot.io/lib/utils";
 import prisma from "@typebot.io/prisma";

@@ -1,7 +1,7 @@
 import {
   BlockClarificationStep,
   BlockPreviewStep,
-  ImageUploadStep,
+  InputSelectionStep,
   useAIGeneration,
 } from "@/features/ai";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
@@ -29,7 +29,7 @@ interface CreateWithAIModalProps {
   onClose: () => void;
 }
 
-const steps = ["Upload", "Clarification", "Preview", "Generation"];
+const steps = ["Input", "Clarification", "Preview", "Generation"];
 
 export const CreateWithAIModal = ({
   isOpen,
@@ -41,6 +41,7 @@ export const CreateWithAIModal = ({
     currentState,
     isLoading,
     handleImageUpload,
+    handleTextPromptSubmit,
     handleClarificationChoiceChange,
     handlePreviewChoiceChange,
     handleContinueToPreview,
@@ -48,6 +49,10 @@ export const CreateWithAIModal = ({
     handleReanalyze,
     reset,
     elementsNeedingClarification,
+    selectedProvider,
+    setSelectedProvider,
+    hasOpenAICredentials,
+    hasGeminiCredentials,
   } = useAIGeneration();
 
   const { mutate: importTypebot } = useMutation(
@@ -86,26 +91,24 @@ export const CreateWithAIModal = ({
     }
   }, [handleGenerate, workspace, router.query.folderId, importTypebot]);
 
-  // No auto-trigger needed anymore - users must go through preview step
-
   const activeColor = useColorModeValue("blue.500", "blue.300");
   const inactiveColor = useColorModeValue("gray.300", "gray.600");
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      size="2xl"
-      closeOnOverlayClick={false}
-    >
-      <ModalOverlay />
-      <ModalContent>
+    <Modal isOpen={isOpen} onClose={handleClose} size="2xl" isCentered>
+      <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(10px)" />
+      <ModalContent maxW="900px" mx={4}>
         <ModalHeader>
           <VStack spacing={4} align="stretch">
-            <Text>Create Typebot with AI</Text>
+            <HStack justify="space-between" align="center">
+              <Text fontSize="xl" fontWeight="bold">
+                Create with AI
+              </Text>
+              <ModalCloseButton position="relative" top="0" right="0" />
+            </HStack>
 
-            <VStack spacing={3}>
-              <HStack spacing={4} justify="center">
+            <VStack spacing={3} align="stretch">
+              <HStack justify="space-between" px={2}>
                 {steps.map((step, index) => (
                   <HStack key={step} spacing={2}>
                     <Circle
@@ -114,8 +117,8 @@ export const CreateWithAIModal = ({
                         index <= activeStepIndex ? activeColor : inactiveColor
                       }
                       color="white"
-                      fontSize="sm"
                       fontWeight="bold"
+                      fontSize="sm"
                     >
                       {index + 1}
                     </Circle>
@@ -128,32 +131,31 @@ export const CreateWithAIModal = ({
                     >
                       {step}
                     </Text>
-                    {index < steps.length - 1 && (
-                      <Text color={inactiveColor}>→</Text>
-                    )}
                   </HStack>
                 ))}
               </HStack>
 
               <Progress
                 value={progressValue}
-                colorScheme="blue"
                 size="sm"
-                width="full"
+                colorScheme="blue"
                 borderRadius="full"
+                bg={useColorModeValue("gray.200", "gray.700")}
               />
             </VStack>
           </VStack>
         </ModalHeader>
 
-        <ModalCloseButton />
-
         <ModalBody pb={6}>
-          {currentState.step === "upload" && (
-            <ImageUploadStep
+          {currentState.step === "input" && (
+            <InputSelectionStep
               onImageSelect={handleImageUpload}
+              onTextPromptSubmit={handleTextPromptSubmit}
               isLoading={isLoading}
-              hasOpenAICredentials={currentState.hasOpenAICredentials}
+              hasOpenAICredentials={hasOpenAICredentials}
+              hasGeminiCredentials={hasGeminiCredentials}
+              selectedProvider={selectedProvider}
+              onProviderChange={setSelectedProvider}
             />
           )}
 
@@ -191,7 +193,8 @@ export const CreateWithAIModal = ({
                 Generating your typebot...
               </Text>
               <Text fontSize="sm" color="gray.600" textAlign="center">
-                AI is creating your typebot based on the analyzed elements. This
+                AI is creating your typebot based on the analyzed{" "}
+                {currentState.inputType === "image" ? "image" : "prompt"}. This
                 may take a few moments.
               </Text>
               <Progress

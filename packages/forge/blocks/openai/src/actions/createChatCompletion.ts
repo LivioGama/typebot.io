@@ -56,6 +56,13 @@ export const createChatCompletion = createAction({
         model: undefined,
       }),
     },
+    {
+      blockId: "gemini",
+      transform: (options) => ({
+        ...options,
+        model: undefined,
+      }),
+    },
   ],
   run: {
     server: ({

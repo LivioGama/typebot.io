@@ -1,11 +1,16 @@
-import { analyzeImageWithCache, generateTypebot } from "@/features/ai";
+import {
+  analyzeImageWithCache,
+  analyzeTextPromptWithCache,
+  generateTypebot,
+} from "@/features/ai";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { trpc } from "@/lib/queryClient";
 import { useToast } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AIGenerationStep,
+  AIInputType,
   CachedAnalysisResult,
   ClarificationChoice,
   DetectedElement,
@@ -17,9 +22,11 @@ export const useAIGeneration = () => {
   const { workspace } = useWorkspace();
 
   const [currentStep, setCurrentStep] = useState<
-    "upload" | "clarification" | "preview" | "generation"
-  >("upload");
+    "input" | "clarification" | "preview" | "generation"
+  >("input");
+  const [inputType, setInputType] = useState<AIInputType>("image");
   const [uploadedImage, setUploadedImage] = useState<File | undefined>();
+  const [textPrompt, setTextPrompt] = useState<string>("");
   const [detectedElements, setDetectedElements] = useState<DetectedElement[]>(
     [],
   );
@@ -32,8 +39,11 @@ export const useAIGeneration = () => {
     CachedAnalysisResult | undefined
   >();
   const [fromCache, setFromCache] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<
+    "openai" | "gemini" | undefined
+  >();
 
-  const { data: credentials } = useQuery(
+  const { data: openaiCredentials } = useQuery(
     trpc.credentials.listCredentials.queryOptions(
       {
         scope: "workspace",
@@ -46,65 +56,91 @@ export const useAIGeneration = () => {
     ),
   );
 
+  const { data: geminiCredentials } = useQuery(
+    trpc.credentials.listCredentials.queryOptions(
+      {
+        scope: "workspace",
+        workspaceId: workspace?.id,
+        type: "gemini",
+      },
+      {
+        enabled: !!workspace?.id,
+      },
+    ),
+  );
+
+  const selectedCredentials =
+    selectedProvider === "gemini" ? geminiCredentials : openaiCredentials;
+  const selectedCredentialId = selectedCredentials?.credentials?.[0]?.id;
+
   const { data: credentialData } = useQuery(
     trpc.credentials.getCredentials.queryOptions(
       {
         scope: "workspace",
         workspaceId: workspace?.id,
-        credentialsId: credentials?.credentials?.[0]?.id || "",
+        credentialsId: selectedCredentialId || "",
       },
       {
-        enabled: !!workspace?.id && !!credentials?.credentials?.[0]?.id,
+        enabled: !!workspace?.id && !!selectedCredentialId,
       },
     ),
   );
 
-  const hasOpenAICredentials = Boolean(credentials?.credentials?.length);
-  const openAICredential = credentials?.credentials?.[0];
+  const hasOpenAICredentials = Boolean(openaiCredentials?.credentials?.length);
+  const hasGeminiCredentials = Boolean(geminiCredentials?.credentials?.length);
+  const hasSelectedCredentials = Boolean(
+    selectedCredentials?.credentials?.length,
+  );
+
   const apiKey = (credentialData?.data as any)?.apiKey;
 
-  const generateTypebotInternal = useCallback(
-    async (elementsToGenerate: DetectedElement[]) => {
-      if (!apiKey) return null;
-
-      try {
-        const typebot = await generateTypebot(elementsToGenerate, apiKey);
-
-        toast({
-          title: "Typebot generated successfully",
-          status: "success",
-        });
-
-        return typebot;
-      } catch (error) {
-        toast({
-          title: "Generation failed",
-          description:
-            error instanceof Error
-              ? error.message
-              : "Failed to generate typebot",
-          status: "error",
-        });
-        return null;
+  useEffect(() => {
+    if (!selectedProvider) {
+      if (hasOpenAICredentials) {
+        setSelectedProvider("openai");
+      } else if (hasGeminiCredentials) {
+        setSelectedProvider("gemini");
       }
+    }
+  }, [hasOpenAICredentials, hasGeminiCredentials, selectedProvider]);
+
+  const generateTypebotInternal = useCallback(
+    async (elements: DetectedElement[]) => {
+      if (!hasSelectedCredentials || !apiKey || !workspace?.id) {
+        throw new Error("Missing credentials or workspace");
+      }
+
+      return generateTypebot(elements, apiKey, selectedProvider || "openai");
     },
-    [apiKey, toast],
+    [hasSelectedCredentials, apiKey, selectedProvider],
   );
 
   const handleImageUpload = useCallback(
     async (file: File, forceAnalysis = false) => {
-      if (!hasOpenAICredentials || !apiKey || !workspace?.id) {
+      if (!hasSelectedCredentials || !apiKey || !workspace?.id) {
+        const providerName =
+          selectedProvider === "gemini" ? "Gemini" : "OpenAI";
         toast({
-          title: "OpenAI credentials required",
-          description:
-            "Please configure OpenAI credentials in your workspace settings first.",
+          title: `${providerName} credentials required`,
+          description: `Please configure ${providerName} credentials in your workspace settings first.`,
           status: "error",
         });
         return;
       }
 
+      setInputType("image");
       setUploadedImage(file);
+      setTextPrompt("");
       setIsLoading(true);
+
+      if (forceAnalysis) {
+        setClarificationChoices([]);
+        setPreviewChoices([]);
+        setCachedResult(undefined);
+        setFromCache(false);
+      }
+
+      const analysisStartTime = performance.now();
 
       try {
         const result = await analyzeImageWithCache(
@@ -112,17 +148,42 @@ export const useAIGeneration = () => {
           apiKey,
           workspace.id,
           forceAnalysis,
+          selectedProvider || "openai",
         );
 
+        const analysisEndTime = performance.now();
+        const analysisTimeMs = Math.round(analysisEndTime - analysisStartTime);
+        const analysisTimeSeconds = (analysisTimeMs / 1000).toFixed(1);
+
         setDetectedElements(result.elements);
-        setCachedResult(result.cached);
+        setCachedResult(
+          result.cacheInfo
+            ? {
+                id: "localStorage",
+                fileHash: "",
+                fileName: result.cacheInfo.fileName,
+                fileSize: file.size,
+                mimeType: file.type,
+                createdAt: new Date(result.cacheInfo.createdAt),
+                analysisResult: result.elements,
+              }
+            : undefined,
+        );
         setFromCache(result.fromCache);
 
-        if (result.fromCache && result.cached) {
+        if (result.fromCache && result.cacheInfo) {
           toast({
             title: "Using cached analysis",
-            description: `Found previous analysis from ${result.cached.createdAt.toLocaleDateString()}`,
+            description: `Found previous analysis for ${result.cacheInfo.fileName} (${result.cacheInfo.provider}) • Instant retrieval`,
             status: "info",
+          });
+        } else {
+          const providerName =
+            selectedProvider === "gemini" ? "Gemini" : "OpenAI";
+          toast({
+            title: "Image analysis complete",
+            description: `${providerName} analyzed ${result.elements.length} elements in ${analysisTimeSeconds}s`,
+            status: "success",
           });
         }
 
@@ -151,7 +212,109 @@ export const useAIGeneration = () => {
         setIsLoading(false);
       }
     },
-    [hasOpenAICredentials, apiKey, workspace?.id, toast],
+    [hasSelectedCredentials, apiKey, workspace?.id, toast, selectedProvider],
+  );
+
+  const handleTextPromptSubmit = useCallback(
+    async (prompt: string, forceAnalysis = false) => {
+      if (!hasSelectedCredentials || !apiKey || !workspace?.id) {
+        const providerName =
+          selectedProvider === "gemini" ? "Gemini" : "OpenAI";
+        toast({
+          title: `${providerName} credentials required`,
+          description: `Please configure ${providerName} credentials in your workspace settings first.`,
+          status: "error",
+        });
+        return;
+      }
+
+      setInputType("prompt");
+      setTextPrompt(prompt);
+      setUploadedImage(undefined);
+      setIsLoading(true);
+
+      if (forceAnalysis) {
+        setClarificationChoices([]);
+        setPreviewChoices([]);
+        setCachedResult(undefined);
+        setFromCache(false);
+      }
+
+      const analysisStartTime = performance.now();
+
+      try {
+        const result = await analyzeTextPromptWithCache(
+          prompt,
+          apiKey,
+          workspace.id,
+          forceAnalysis,
+          selectedProvider || "openai",
+        );
+
+        const analysisEndTime = performance.now();
+        const analysisTimeMs = Math.round(analysisEndTime - analysisStartTime);
+        const analysisTimeSeconds = (analysisTimeMs / 1000).toFixed(1);
+
+        setDetectedElements(result.elements);
+        setCachedResult(
+          result.cacheInfo
+            ? {
+                id: "localStorage",
+                fileHash: "",
+                fileName: result.cacheInfo.fileName,
+                fileSize: prompt.length,
+                mimeType: "text/plain",
+                createdAt: new Date(result.cacheInfo.createdAt),
+                analysisResult: result.elements,
+              }
+            : undefined,
+        );
+        setFromCache(result.fromCache);
+
+        if (result.fromCache && result.cacheInfo) {
+          toast({
+            title: "Using cached analysis",
+            description: `Found previous analysis for this prompt (${result.cacheInfo.provider}) • Instant retrieval`,
+            status: "info",
+          });
+        } else {
+          const providerName =
+            selectedProvider === "gemini" ? "Gemini" : "OpenAI";
+          toast({
+            title: "Text prompt analysis complete",
+            description: `${providerName} analyzed and created ${result.elements.length} elements in ${analysisTimeSeconds}s`,
+            status: "success",
+          });
+        }
+
+        const elementsNeedingClarification = result.elements.filter(
+          (el) => el.clarificationNeeded || el.type === "choice",
+        );
+
+        if (elementsNeedingClarification.length > 0) {
+          setCurrentStep("clarification");
+        } else {
+          setCurrentStep("preview");
+          const initialPreviewChoices = result.elements.map((_, index) => ({
+            elementIndex: index,
+            isIncluded: true,
+          }));
+          setPreviewChoices(initialPreviewChoices);
+        }
+      } catch (error) {
+        toast({
+          title: "Analysis failed",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to analyze text prompt",
+          status: "error",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [hasSelectedCredentials, apiKey, workspace?.id, toast, selectedProvider],
   );
 
   const handleClarificationChoiceChange = useCallback(
@@ -198,7 +361,8 @@ export const useAIGeneration = () => {
   }, [detectedElements, previewChoices.length]);
 
   const handleGenerate = useCallback(async () => {
-    if (!uploadedImage || !hasOpenAICredentials || !apiKey) return null;
+    if ((!uploadedImage && !textPrompt) || !hasSelectedCredentials || !apiKey)
+      return null;
 
     setCurrentStep("generation");
     setIsLoading(true);
@@ -244,7 +408,8 @@ export const useAIGeneration = () => {
     }
   }, [
     uploadedImage,
-    hasOpenAICredentials,
+    textPrompt,
+    hasSelectedCredentials,
     apiKey,
     detectedElements,
     clarificationChoices,
@@ -253,14 +418,24 @@ export const useAIGeneration = () => {
   ]);
 
   const handleReanalyze = useCallback(async () => {
-    if (uploadedImage) {
+    if (inputType === "image" && uploadedImage) {
       await handleImageUpload(uploadedImage, true);
+    } else if (inputType === "prompt" && textPrompt) {
+      await handleTextPromptSubmit(textPrompt, true);
     }
-  }, [uploadedImage, handleImageUpload]);
+  }, [
+    inputType,
+    uploadedImage,
+    textPrompt,
+    handleImageUpload,
+    handleTextPromptSubmit,
+  ]);
 
   const reset = useCallback(() => {
-    setCurrentStep("upload");
+    setCurrentStep("input");
+    setInputType("image");
     setUploadedImage(undefined);
+    setTextPrompt("");
     setDetectedElements([]);
     setClarificationChoices([]);
     setPreviewChoices([]);
@@ -271,11 +446,15 @@ export const useAIGeneration = () => {
 
   const currentState: AIGenerationStep = {
     step: currentStep,
+    inputType,
     uploadedImage,
+    textPrompt,
     analysisResult: detectedElements.length > 0 ? detectedElements : undefined,
     clarificationChoices,
     previewChoices,
     hasOpenAICredentials,
+    hasGeminiCredentials,
+    selectedProvider,
     cachedResult,
     fromCache,
   };
@@ -284,12 +463,17 @@ export const useAIGeneration = () => {
     currentState,
     isLoading,
     handleImageUpload,
+    handleTextPromptSubmit,
     handleClarificationChoiceChange,
     handlePreviewChoiceChange,
     handleContinueToPreview,
     handleGenerate,
     handleReanalyze,
     reset,
+    selectedProvider,
+    setSelectedProvider,
+    hasOpenAICredentials,
+    hasGeminiCredentials,
     elementsNeedingClarification: detectedElements.filter(
       (el) => el.clarificationNeeded || el.type === "choice",
     ),

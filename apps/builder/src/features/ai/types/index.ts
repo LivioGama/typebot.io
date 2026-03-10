@@ -17,6 +17,55 @@ export interface DetectedElement {
   confidence: number;
   clarificationNeeded: boolean;
   isMultiple?: boolean;
+  suggestedBlockType?: string;
+  fieldConfig?: {
+    placeholder?: string;
+    isRequired?: boolean;
+    isLong?: boolean;
+    isMultipleChoice?: boolean;
+    isSearchable?: boolean;
+    searchInputPlaceholder?: string;
+    areInitialSearchButtonsVisible?: boolean;
+    buttonLabel?: string;
+    buttonType?: "Numbers" | "Icons";
+    length?: number;
+    startsAt?: number;
+    isOneClickSubmitEnabled?: boolean;
+    hasTime?: boolean;
+    isRange?: boolean;
+    format?: string;
+    isMultipleAllowed?: boolean;
+    visibility?: string;
+    retryMessageContent?: string;
+    defaultCountryCode?: string;
+    labels?: {
+      placeholder?: string;
+      button?: string;
+      from?: string;
+      to?: string;
+      left?: string;
+      right?: string;
+      clear?: string;
+      skip?: string;
+    };
+    validation?: {
+      required?: boolean;
+      format?: string;
+      minLength?: number;
+      pattern?: string;
+      min?: number;
+      max?: number;
+    };
+    formatting?: {
+      style?: string;
+      currency?: string;
+    };
+    allowedFileTypes?: {
+      isEnabled: boolean;
+      types?: string[];
+    };
+  };
+  content?: any;
 }
 
 export interface ClarificationChoice {
@@ -46,13 +95,19 @@ export interface AnalysisResultWithCache {
   fromCache: boolean;
 }
 
+export type AIInputType = "image" | "prompt";
+
 export interface AIGenerationStep {
-  step: "upload" | "clarification" | "preview" | "generation";
+  step: "input" | "clarification" | "preview" | "generation";
+  inputType?: AIInputType;
   uploadedImage?: File;
+  textPrompt?: string;
   analysisResult?: DetectedElement[];
   clarificationChoices: ClarificationChoice[];
   previewChoices: PreviewChoice[];
   hasOpenAICredentials: boolean;
+  hasGeminiCredentials: boolean;
+  selectedProvider?: "openai" | "gemini";
   cachedResult?: CachedAnalysisResult;
   fromCache?: boolean;
 }

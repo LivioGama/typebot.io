@@ -18,3 +18,6 @@ alwaysApply: true
 - Use `bun run test` to run the unit test script (which executes `vitest run`)
 - We test only complexe and critical functions
 - We never use Vitest mocks. We almost always want to modify the function signature to have dependencies as arguments instead.
+
+
+- When finishing, never run build nor dev command.

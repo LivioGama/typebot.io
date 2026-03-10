@@ -81,6 +81,24 @@ export const parseChatCompletionOptions = ({ models }: Props) =>
       direction: "row",
       defaultValue: 1,
     }),
+    structuredOutput: option
+      .object({
+        enabled: option.boolean.layout({
+          label: "Enable structured JSON output",
+          defaultValue: false,
+        }),
+        schema: option.string.layout({
+          inputType: "textarea",
+          placeholder:
+            'Enter JSON schema (e.g., {"type": "object", "properties": {"name": {"type": "string"}}})',
+          label: "JSON Schema",
+        }),
+      })
+      .layout({
+        accordion: "Advanced settings",
+        label: "Structured Output",
+      })
+      .optional(),
     responseMapping: option
       .saveResponseArray([
         "Message content",

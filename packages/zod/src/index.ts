@@ -5,5 +5,5 @@ import { extendWithTypebotLayout } from "./extendWithTypebotLayout";
 extendWithTypebotLayout(z);
 extendZodWithOpenApi(z);
 
-export { z };
 export type { ZodLayoutMetadata } from "./extendWithTypebotLayout";
+export { z };

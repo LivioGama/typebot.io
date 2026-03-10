@@ -6,4 +6,5 @@ if (!global.prisma) {
   global.prisma = new PrismaClient();
 }
 
+export const prisma = global.prisma;
 export default global.prisma;
